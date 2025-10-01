@@ -1,0 +1,41 @@
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Streamlit & Jupyter
+.streamlit/
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs & editors
+.vscode/
+.idea/
+
+# Data & outputs (ignored by default)
+data/
+outputs/
+*.csv
+*.xlsx
+*.zip
+*.pdf
+
+# Models (ignore all, but allow one reference model)
+*.pkl
+*.joblib
+!model/logistic_regression_model.pkl   # keep this one tracked
+
+# CSVs (ignore all, but allow one sample file)
+!sample_data/student_sample.csv
+
+# Logs
+*.log
