@@ -25,24 +25,6 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 
 st.set_page_config(page_title="Early-Warning — At-Risk Students", page_icon="🎓", layout="centered")
 
-# BASE = Path(__file__).resolve().parent
-# MODEL_PATH = BASE / "model" / "logistic_regression_model.pkl"
-
-# # debug (one time)
-# print("HERE:", BASE)
-# print("TREE:", glob.glob(str(BASE / "**/*"), recursive=True))
-
-# # one-time debug
-# st.caption(f"Looking for model at: {MODEL_PATH}")
-# st.caption(f"Exists? {MODEL_PATH.exists()}")
-# if (BASE / "model").exists():
-#     st.caption(f"Files in /model: {[p.name for p in (BASE/'model').iterdir()]}")
-# else:
-#     st.caption("No /model directory found next to app.py")
-# assert MODEL_PATH.exists(), f"Missing: {MODEL_PATH}"
-# model = joblib.load(str(MODEL_PATH))
-# ---- Model path (robust) ----
-
 BASE = Path(__file__).resolve().parent
 
 # 1) Allow override via env var
@@ -68,14 +50,14 @@ if not any(p and Path(p).exists() for p in candidates):
 # 4) Pick the first existing path
 MODEL_PATH = next((Path(p) for p in candidates if p and Path(p).exists()), None)
 
-with st.expander("Model loading details", expanded=False):
-    st.caption(f"Checked candidates: {[str(c) for c in candidates if c]}")
-    st.caption(f"Selected: {str(MODEL_PATH) if MODEL_PATH else 'None'}")
+# with st.expander("Model loading details", expanded=False):
+#     st.caption(f"Checked candidates: {[str(c) for c in candidates if c]}")
+#     st.caption(f"Selected: {str(MODEL_PATH) if MODEL_PATH else 'None'}")
 
-if MODEL_PATH is None:
-    st.error("Couldn't find logistic_regression_model.pkl. Place it in ./models/ next to app.py "
-             "or set MODEL_PATH env var to the absolute file path.")
-    st.stop()
+# if MODEL_PATH is None:
+#     st.error("Couldn't find logistic_regression_model.pkl. Place it in ./models/ next to app.py "
+#              "or set MODEL_PATH env var to the absolute file path.")
+#     st.stop()
 
 # 5) Load the model
 try:
