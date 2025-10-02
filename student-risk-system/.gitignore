@@ -22,13 +22,5 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Data & outputs (ignored by default)
-data/
-outputs/
-*.csv
-*.xlsx
-*.zip
-*.pdf
-
 # Logs
 *.log
