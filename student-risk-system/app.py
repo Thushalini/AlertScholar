@@ -1,13 +1,13 @@
 # app.py
-# Streamlit — Black UI + Red accents, polished KPI cards, AI interventions spinner (OpenAI LLM)
+# Streamlit — Black UI + Red accents, polished KPI cards (No LLM usage)
 # Run:  streamlit run app.py
-# Reqs: pip install streamlit joblib reportlab pandas numpy openai tenacity python-dotenv
+# Reqs: pip install streamlit joblib reportlab pandas numpy python-dotenv
 
-import os, io, zipfile, json, joblib, numpy as np, pandas as pd, streamlit as st
+import os, io, zipfile, joblib, numpy as np, pandas as pd, streamlit as st
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "logistic_regression_model.pkl")
+model = joblib.load(MODEL_PATH)
 from datetime import datetime
 from io import BytesIO
-from tenacity import retry, stop_after_attempt, wait_exponential
-from openai import OpenAI
 
 # Load .env if present
 try:
@@ -191,12 +191,6 @@ th, td { color: var(--text) !important; }
 hr {border-top:1px solid var(--border);}
 footer {visibility:hidden}
 .small {font-size:.85rem;color:var(--muted);}
-
-/* Subtle animated dots for 'crafting' label */
-.dotpulse span{display:inline-block; width:6px; height:6px; margin-left:4px; border-radius:50%; background:#fff; opacity:.35; animation: dp 1.2s infinite;}
-.dotpulse span:nth-child(2){animation-delay:.2s}
-.dotpulse span:nth-child(3){animation-delay:.4s}
-@keyframes dp{0%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -230,103 +224,6 @@ except Exception as e:
 THRESHOLD = float(meta.get("threshold", 0.5))
 POS_LABEL = meta.get("positive_label", 1)
 EXPECTED = list(getattr(model, "feature_names_in_", meta.get("feature_names_", [])))
-
-# =========================
-# OpenAI client (cached) + helpers
-# =========================
-@st.cache_resource(show_spinner=False)
-def _get_openai():
-  key = os.getenv("OPENAI_API_KEY", "")
-  if not key:
-    raise RuntimeError("Set OPENAI_API_KEY in your environment or .env")
-  return OpenAI(api_key=key)
-
-def _coerce_for_json(d: dict) -> dict:
-  out = {}
-  for k, v in d.items():
-    try:
-      if v is None: out[k] = ""
-      elif isinstance(v, (np.floating, float)): out[k] = float(v)
-      elif isinstance(v, (np.integer, int)): out[k] = int(v)
-      else: out[k] = str(v)
-    except Exception:
-      out[k] = str(v)
-  return out
-
-_DEFAULT_LLM_MODEL = "gpt-4o-mini"
-_DEFAULT_LLM_TEMP = 0.2
-_DEFAULT_LLM_MAX_ITEMS = 5
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
-def llm_interventions(row: dict, proba: float, threshold: float,
-                      model_name: str = _DEFAULT_LLM_MODEL,
-                      temperature: float = _DEFAULT_LLM_TEMP,
-                      max_items: int = _DEFAULT_LLM_MAX_ITEMS):
-  """Return list of {title, why, steps[], owner, when, kpis[], priority} from OpenAI, or raise on empty."""
-  client = _get_openai()
-  student = _coerce_for_json(row)
-
-  system_msg = (
-    "You are a school intervention planner for Sri Lankan secondary education. "
-    "Return concise, ethical, classroom-ready academic interventions. "
-    "Avoid medical/psychiatric advice. Prefer actions that reduce teacher workload."
-  )
-  user_msg = {
-    "role": "user",
-    "content": (
-      "Produce ONLY a JSON object with EXACTLY this top-level shape:\n"
-      "{ \"plan\": [ { \"title\": str, \"why\": str, \"steps\": [str,...], "
-      "\"owner\": str, \"when\": str, \"kpis\": [str,...], \"priority\": \"high\"|\"medium\"|\"low\" }, ... ] }\n\n"
-      f"risk_probability: {proba:.4f}\nthreshold: {threshold:.2f}\n"
-      f"student_json:\n{json.dumps(student, ensure_ascii=False)}\n\n"
-      f"Constraints:\n- 3 to {max_items} items in plan.\n"
-      "- steps: 3–4 concrete actions with frequency/duration.\n"
-      "- kpis: measurable checks.\n"
-      "- No extra keys, no prose outside JSON."
-    )
-  }
-
-  resp = client.chat.completions.create(
-    model=model_name,
-    temperature=temperature,
-    response_format={"type": "json_object"},
-    messages=[{"role":"system","content":system_msg}, user_msg],
-    max_tokens=600,
-  )
-
-  txt = (resp.choices[0].message.content or "").strip()
-  if not txt:
-    raise RuntimeError("Empty response text")
-
-  if txt.startswith("[") and txt.endswith("]"):
-    txt = json.dumps({"plan": json.loads(txt)})
-
-  data = json.loads(txt)
-  plan = (
-    data.get("plan") or
-    data.get("items") or
-    data.get("recommendations") or
-    (data if isinstance(data, list) else [])
-  )
-  if not isinstance(plan, list) or not plan:
-    raise RuntimeError("No plan items")
-
-  clean = []
-  for it in plan:
-    if not isinstance(it, dict): continue
-    clean.append({
-      "title": (it.get("title") or "").strip(),
-      "why": (it.get("why") or "").strip(),
-      "steps": [str(s).strip() for s in (it.get("steps") or [])][:6],
-      "owner": (it.get("owner") or "Teacher + student").strip(),
-      "when": (it.get("when") or "2–4 weeks").strip(),
-      "kpis": [str(k).strip() for k in (it.get("kpis") or [])][:6],
-      "priority": str(it.get("priority") or "medium").lower()
-    })
-  clean = [c for c in clean if c["title"]]
-  if not clean:
-    raise RuntimeError("Parsed plan was empty")
-  return clean
 
 # =========================
 # Encoding & Prep (gender-neutral prediction)
@@ -394,81 +291,153 @@ def _safe_predict_proba(df: pd.DataFrame) -> np.ndarray:
   return probas[:, pos_idx]
 
 # =========================
-# Rule-based fallback interventions
+# Dynamic, rule-based interventions (no LLM) — uses row + proba + threshold
 # =========================
-def interventions(row: dict):
+def interventions_dynamic(row: dict, proba: float, threshold: float):
+  """
+  Return a prioritized list of interventions based on:
+  - Subject score gaps (Math/Reading/Writing/Science)
+  - Total/average score
+  - Test preparation completion
+  - Lunch (reduced/free vs standard)
+  - Parental level of education
+  - Risk probability level vs threshold
+  """
   def sev(score):
-    try: s = float(score)
-    except: return None
-    if s < 50:  return "high"
-    if s < 60:  return "medium"
-    if s < 75:  return "low"
+    try:
+      s = float(score)
+    except:
+      return None
+    if s < 40:  return ("high",  "Severe gap (<40)")
+    if s < 60:  return ("medium","Moderate gap (40–59)")
+    if s < 75:  return ("low",   "Mild gap (60–74)")
     return None
 
+  def enrich(score):
+    try:
+      s = float(score)
+    except:
+      return False
+    return s >= 85
+
   plan = []
-  gaps = {
-    "Math": sev(row.get("math_score")),
-    "Reading": sev(row.get("reading_score")),
-    "Writing": sev(row.get("writing_score")),
-    "Science": sev(row.get("science_score")),
-  }
 
-  for subject, level in gaps.items():
-    if not level: continue
-    if subject == "Math":
-      steps = [
-        "Enroll in math support block 3×/week (Mon/Wed/Fri, 45 mins).",
-        "Daily 30-minute practice (Set A) with mistake log.",
-        "Weekly mini-quiz; reteach missed objectives."
-      ]
-    elif subject == "Reading":
-      steps = [
-        "Guided reading 20 mins/day using leveled texts.",
-        "2×/week vocabulary + comprehension drills.",
-        "Pair with a peer for alternate-day reading aloud."
-      ]
-    elif subject == "Writing":
-      steps = [
-        "Structured paragraph→essay scaffold 2×/week (intro, evidence, conclusion).",
-        "One writing conference/week for targeted feedback.",
-        "Use checklist for grammar + clarity before submission."
-      ]
+  # Subject-level gaps
+  subjects = [
+    ("Math",    row.get("math_score")),
+    ("Reading", row.get("reading_score")),
+    ("Writing", row.get("writing_score")),
+    ("Science", row.get("science_score")),
+  ]
+  for subject, val in subjects:
+    level = sev(val)
+    if level:
+      priority, note = level
+      if subject == "Math":
+        steps = [
+          "Enroll in math support block 3×/week (45 mins).",
+          "Daily 30-minute practice with mistake log.",
+          "Weekly mini-quiz; reteach missed objectives."
+        ]
+      elif subject == "Reading":
+        steps = [
+          "Guided reading 20 mins/day (leveled texts).",
+          "2×/week vocabulary + comprehension drills.",
+          "Peer reading aloud on alternate days."
+        ]
+      elif subject == "Writing":
+        steps = [
+          "Paragraph→essay scaffold 2×/week (intro, evidence, conclusion).",
+          "Weekly 1:1 writing conference for targeted feedback.",
+          "Use a pre-submit checklist (grammar + clarity)."
+        ]
+      else:
+        steps = [
+          "Weekly hands-on lab linking theory to practice.",
+          "After each topic: concept map + 10 MCQs on Friday.",
+          "One misconception-fix session/week from exit tickets."
+        ]
+      plan.append({
+        "title": f"{subject} remediation",
+        "why": f"{subject} score {float(val):.0f}. {note}.",
+        "steps": steps,
+        "owner": "Subject teacher + student",
+        "when": "2–4 weeks (review weekly)",
+        "kpis": [f"{subject} checkpoint +10 pts", "≥80% on weekly mini-quiz", "≤2 missing tasks"],
+        "priority": priority
+      })
+
+  # Enrichment (strengths)
+  for subject, val in subjects:
+    if enrich(val):
+      plan.append({
+        "title": f"{subject} enrichment",
+        "why": f"{subject} strength (≥85). Maintain momentum while addressing other gaps.",
+        "steps": [
+          "Add one challenge task per week (past papers/olympiad-style).",
+          "Student leads a 5-min micro-teach on a mastered concept.",
+          "Portfolio: collect best work; reflect on winning strategies."
+        ],
+        "owner": "Subject teacher + student",
+        "when": "2–4 weeks",
+        "kpis": [f"{subject} avg stays ≥85", "1 challenge task/week completed"],
+        "priority": "low"
+      })
+
+  # Whole-student risk banding
+  if proba >= threshold:
+    if proba >= max(0.8, threshold + 0.2):
+      when_txt = "1–2 weeks (intensive start)"
+      prio = "high"
+    elif proba >= threshold + 0.1:
+      when_txt = "2–3 weeks"
+      prio = "high"
     else:
-      steps = [
-        "Hands-on lab each week to link theory with practice.",
-        "Concept map after each topic; 10 MCQs practice every Fri.",
-        "One misconception-fix session/week based on exit tickets."
-      ]
+      when_txt = "3–4 weeks"
+      prio = "medium"
 
-    why = f"{subject} score is below proficiency — {level.upper()} priority."
+    try:
+      total = float(row.get("total_score"))
+    except:
+      total = sum(float(x or 0) for _, x in subjects)
+
     plan.append({
-      "title": f"{subject} remediation",
-      "why": why,
-      "steps": steps,
-      "owner": "Subject teacher + student",
-      "when": "2–4 weeks (review weekly)",
-      "kpis": [f"{subject} checkpoint +10 pts", "≥80% on weekly mini-quiz", "≤2 missing tasks"],
-      "priority": level
+      "title": "Advisor meeting + coordinated study plan",
+      "why": f"Risk probability {proba:.0%} ≥ threshold {threshold:.2f}. Total {total:.0f}/400 indicates need for structured plan.",
+      "steps": [
+        "Set 3 SMART goals for next 2 weeks; share with parent/guardian.",
+        "Daily 45-minute study block + task tracker (Mon–Fri).",
+        "Friday progress review; adjust goals and materials."
+      ],
+      "owner": "Advisor + student (+ parent)",
+      "when": when_txt,
+      "kpis": ["Goals completed ≥80%", "Total score +30 in 4 weeks", "Attendance ≥95%"],
+      "priority": prio
     })
 
-  tprep = str(row.get("test_preparation_course", "0")).strip().lower() in ("0","no","false","none","")
-  if tprep:
+  # Access & habits
+  tprep_incomplete = str(row.get("test_preparation_course", "0")).strip().lower() in ("0","no","false","none","")
+  if tprep_incomplete:
     plan.append({
       "title": "Join test-preparation program",
-      "why": "Not enrolled/completed; course boosts timing, strategy, and recall.",
-      "steps": ["Enroll this week; attend all sessions.", "Complete 2 timed practice sets/week; review errors.", "Track improvement in mock scores."],
+      "why": "Course improves timing, strategy, recall; currently not completed.",
+      "steps": ["Enroll this week; attend all sessions.",
+                "Do 2 timed practice sets/week and review errors.",
+                "Track mock score improvement."],
       "owner": "Student + test-prep coordinator",
-      "when": "Start immediately; monitor weekly",
-      "kpis": ["+10 percentile in mocks", "100% session attendance", "Error rate ↓ 30%"],
-      "priority": "high"
+      "when": "Start now; monitor weekly",
+      "kpis": ["+10 percentile in mocks", "100% attendance", "Error rate ↓ 30%"],
+      "priority": "high" if proba >= threshold else "medium"
     })
 
   lunch_reduced = str(row.get("lunch","1")).strip().startswith("0")
   if lunch_reduced:
     plan.append({
       "title": "After-school tutoring & mentoring",
-      "why": "Reduced/free lunch may indicate access barriers; add structured support.",
-      "steps": ["2×/week tutoring (math/writing focus).", "Assign mentor for weekly check-ins.", "Provide study materials + quiet study slot."],
+      "why": "Reduced/free lunch may signal access barriers; structured support helps consistency.",
+      "steps": ["2×/week tutoring (math/writing focus).",
+                "Assign mentor for weekly check-ins.",
+                "Provide study materials + quiet study slot."],
       "owner": "Counselor + after-school staff",
       "when": "2–6 weeks",
       "kpis": ["Homework completion ≥90%", "Attendance ≥95%", "Subject quiz avg ≥75%"],
@@ -479,28 +448,24 @@ def interventions(row: dict):
   if ple in ["high school", "some college"]:
     plan.append({
       "title": "Parent partnership plan",
-      "why": f"Parental education '{ple}' — guided home routines boost consistency.",
-      "steps": ["Share a 20-min nightly study routine template.", "Weekly SMS summary: tasks completed + upcoming checks.", "Invite to 1× parent workshop on ‘supporting study at home’."],
+      "why": f"Parental education: {ple}. Guided home routines can boost consistency.",
+      "steps": ["Share a 20-min nightly study template.",
+                "Weekly SMS summary: tasks completed + upcoming checks.",
+                "Invite to a workshop on ‘supporting study at home’. "],
       "owner": "Class teacher + parent/guardian",
       "when": "4 weeks",
-      "kpis": ["Parent acknowledgement of weekly SMS", "Home routine followed ≥5 days/week"],
+      "kpis": ["Parent acknowledges weekly SMS", "Home routine ≥5 days/week"],
       "priority": "medium"
     })
 
-  try: total = float(row.get("total_score", 999))
-  except: total = 999
-  if total < 240:
-    plan.append({
-      "title": "Weekly advisor meeting + study plan",
-      "why": f"Total score {total:.0f} < 240 — needs coordinated improvement.",
-      "steps": ["Set 3 SMART goals for the next 2 weeks.", "Daily 45-minute study block with task tracker.", "Progress review every Friday; adjust goals."],
-      "owner": "Advisor + student",
-      "when": "2–4 weeks",
-      "kpis": ["Goals completed ≥80%", "Total score +30 in 4 weeks"],
-      "priority": "high"
-    })
-
+  # Prioritize and de-dupe
   prio_rank = {"high": 0, "medium": 1, "low": 2}
+  best = {}
+  for it in plan:
+    t = it["title"]
+    if (t not in best) or (prio_rank[it["priority"]] < prio_rank[best[t]["priority"]]):
+      best[t] = it
+  plan = list(best.values())
   plan.sort(key=lambda x: prio_rank.get(x["priority"], 3))
   return plan
 
@@ -576,12 +541,12 @@ def _sanitize_batch(df: pd.DataFrame) -> pd.DataFrame:
   if "test_preparation_course" in df.columns:
     df["test_preparation_course"] = df["test_preparation_course"].apply(_to01)
 
-  # Coerce all score fields (and total) to numeric: strip everything except digits, dot, minus
+  # Coerce all score fields (and total) to numeric
   for c in ["math_score","reading_score","writing_score","science_score","total_score"]:
     if c in df.columns:
       df[c] = (
         df[c].astype(str)
-             .str.replace(r"[^\d\.\-]", "", regex=True)  # removes tabs, commas, text
+             .str.replace(r"[^\d\.\-]", "", regex=True)
              .replace({"": np.nan})
       )
       df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -594,9 +559,6 @@ def _sanitize_batch(df: pd.DataFrame) -> pd.DataFrame:
 with st.sidebar:
   st.markdown("## ⚙️ Settings")
   THRESHOLD = st.slider("Operating Threshold", min_value=0.10, max_value=0.90, value=float(THRESHOLD), step=0.01)
-  st.markdown("---")
-  st.markdown("### 🤖 AI Recommendations")
-  use_llm = st.toggle("Use OpenAI LLM for interventions", value=True)  # keep only this toggle
   st.markdown("---")
   st.markdown("**About**\n\nThis tool flags students who may need support and generates parent-friendly reports.", unsafe_allow_html=True)
   st.markdown("<span class='small'>Built for teachers in Sri Lanka to reduce admin workload.</span>", unsafe_allow_html=True)
@@ -669,7 +631,6 @@ with tab1:
     try:
       proba = float(_safe_predict_proba(X)[0])
     except Exception as e:
-      # Show true columns fed to the model
       try:
         cols_sent = list(_align_to_expected(_encode_inputs(pd.DataFrame([row]), meta), EXPECTED).columns)
       except Exception:
@@ -706,28 +667,11 @@ with tab1:
         </div>
       """, unsafe_allow_html=True)
 
-    # Recommended Interventions (add some top gap)
+    # Recommended Interventions (dynamic, rule-based; no LLM)
     st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
     st.markdown("<h4 style='margin:0 0 10px 0;'>Recommended Interventions</h4>", unsafe_allow_html=True)
-    crafted = st.empty()
-    crafted.markdown(
-            "<span class='small'>Insights&nbsp;<span class='dotpulse'><span></span><span></span><span></span></span></span>",
-            unsafe_allow_html=True
-          )
-    try:
-      if use_llm:
-        with st.spinner("Making Insights…"):
-          plan = llm_interventions({**row, "total_score": float(X.loc[0, "total_score"])},
-                             proba, THRESHOLD)
-        if not plan:
-          raise RuntimeError("Empty AI plan")
-      else:
-        raise RuntimeError("LLM disabled")
-    except Exception as e:
-      st.warning(f"AI plan unavailable ({e}). Showing fallback plan.")
-      plan = interventions({**row, "total_score": float(X.loc[0, "total_score"])})
 
-    crafted.empty()
+    plan = interventions_dynamic({**row, "total_score": float(X.loc[0, "total_score"])}, proba, THRESHOLD)
 
     if not plan:
       st.info("No specific gaps detected. Suggest general study skills and weekly monitoring.")
@@ -823,7 +767,6 @@ with tab2:
       X_model = _prepare_for_model(Xraw, EXPECTED)   # adds gender_encoded + parental_education_encoded
       probs = _safe_predict_proba(X_model)
     except Exception as e:
-      # Show the TRUE columns sent to the model (after encoding + alignment)
       try:
         cols_sent = list(_align_to_expected(_encode_inputs(Xraw, meta), EXPECTED).columns)
       except Exception:
@@ -842,7 +785,7 @@ with tab2:
     out["at_risk"] = preds
 
     def _first_tip(i: int):
-      row = {
+      row_i = {
         "parental_level_of_education": out.loc[i, "parental_level_of_education"] if "parental_level_of_education" in out.columns else "",
         "lunch": out.loc[i, "lunch"] if "lunch" in out.columns else 1,
         "test_preparation_course": out.loc[i, "test_preparation_course"] if "test_preparation_course" in out.columns else 0,
@@ -852,8 +795,9 @@ with tab2:
         "science_score": out.loc[i, "science_score"] if "science_score" in out.columns else None,
         "total_score": out.loc[i, "total_score"] if "total_score" in out.columns else None,
       }
-      plan_i = interventions(row)
-      return plan_i[0]["title"] if plan_i else ""
+      p = float(out.loc[i, "risk_probability"])
+      pl = interventions_dynamic(row_i, p, THRESHOLD)
+      return pl[0]["title"] if pl else ""
     out["first_intervention"] = [_first_tip(i) for i in range(len(out))]
 
     st.dataframe(out.head(20), use_container_width=True)
@@ -889,12 +833,12 @@ with tab2:
             "science_score": out.loc[i, "science_score"] if "science_score" in out.columns else None,
             "total_score": total_i
           }
-          plan_i = interventions(row_i)
+          plan_i = interventions_dynamic(row_i, float(out.loc[i, "risk_probability"]), THRESHOLD)
           tips_i = [f"{j+1}. {it['title']} — {it['why']}" for j, it in enumerate(plan_i)] if plan_i else []
 
           pdf = build_parent_letter_pdf(
             {"student_name": sname, "class_name": cname, "gender": gndr, "total_score": total_i},
-            float(probs[i]), THRESHOLD, tips_i
+            float(out.loc[i, "risk_probability"]), THRESHOLD, tips_i
           )
           safe_name = (sname or f"student_{i+1}").replace(" ", "_")
           zf.writestr(f"{safe_name}_parent_letter.pdf", pdf)
