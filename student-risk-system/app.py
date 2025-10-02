@@ -269,7 +269,7 @@ with right:
 # =========================
 # Config & Load model
 # =========================
-MODEL_PATH = os.getenv("MODEL_PATH", "model/logistic_regression_model.pkl")
+# MODEL_PATH = os.getenv("MODEL_PATH", "models/logistic_regression_model.pkl")
 
 @st.cache_resource(show_spinner=True)
 def load_model(path: str):
