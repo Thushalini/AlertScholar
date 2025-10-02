@@ -10,6 +10,21 @@ from datetime import datetime
 from io import BytesIO
 
 from pathlib import Path, PurePath
+
+# Load .env if present
+try:
+  from dotenv import load_dotenv
+  load_dotenv()
+except Exception:
+  pass
+
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+st.set_page_config(page_title="Early-Warning — At-Risk Students", page_icon="🎓", layout="centered")
+
 BASE = Path(__file__).resolve().parent
 MODEL_PATH = BASE / "model" / "logistic_regression_model.pkl"
 
@@ -26,21 +41,6 @@ else:
     st.caption("No /model directory found next to app.py")
 assert MODEL_PATH.exists(), f"Missing: {MODEL_PATH}"
 model = joblib.load(str(MODEL_PATH))
-
-
-# Load .env if present
-try:
-  from dotenv import load_dotenv
-  load_dotenv()
-except Exception:
-  pass
-
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-
-st.set_page_config(page_title="Early-Warning — At-Risk Students", page_icon="🎓", layout="centered")
 
 # =========================
 # Styles (Black + Red) + Alignment helpers
