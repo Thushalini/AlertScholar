@@ -6,3 +6,4 @@ scikit-learn
 openai>=1.13.3
 python-dotenv>=1.0.1
 tenacity>=8.2.3
+reportlab>=3.10.0
