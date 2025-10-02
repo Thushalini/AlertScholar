@@ -17,6 +17,13 @@ MODEL_PATH = BASE / "model" / "logistic_regression_model.pkl"
 print("HERE:", BASE)
 print("TREE:", glob.glob(str(BASE / "**/*"), recursive=True))
 
+# one-time debug
+st.caption(f"Looking for model at: {MODEL_PATH}")
+st.caption(f"Exists? {MODEL_PATH.exists()}")
+if (BASE / "model").exists():
+    st.caption(f"Files in /model: {[p.name for p in (BASE/'model').iterdir()]}")
+else:
+    st.caption("No /model directory found next to app.py")
 assert MODEL_PATH.exists(), f"Missing: {MODEL_PATH}"
 model = joblib.load(str(MODEL_PATH))
 
