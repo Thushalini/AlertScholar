@@ -4,8 +4,10 @@
 # Reqs: pip install streamlit joblib reportlab pandas numpy python-dotenv
 
 import os, io, zipfile, joblib, numpy as np, pandas as pd, streamlit as st
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "logistic_regression_model.pkl")
-model = joblib.load(MODEL_PATH)
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / "model" / "logistic_regression_model.pkl"
+model = joblib.load(str(MODEL_PATH))
 from datetime import datetime
 from io import BytesIO
 
