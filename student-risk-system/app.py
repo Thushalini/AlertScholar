@@ -12,11 +12,11 @@ from io import BytesIO
 from pathlib import Path, PurePath
 
 # Load .env if present
-try:
-  from dotenv import load_dotenv
-  load_dotenv()
-except Exception:
-  pass
+# try:
+#   from dotenv import load_dotenv
+#   load_dotenv()
+# except Exception:
+#   pass
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -51,17 +51,17 @@ env_path = os.getenv("MODEL_PATH")
 # 2) Common candidate locations
 candidates = [
     env_path,
-    BASE / "model" / "logistic_regression_model.pkl",
+    BASE / "models" / "logistic_regression_model.pkl",
     BASE / "logistic_regression_model.pkl",
-    BASE.parent / "model" / "logistic_regression_model.pkl",
+    BASE.parent / "models" / "logistic_regression_model.pkl",
     # Streamlit Cloud/Spaces-style absolute path (seen in your logs)
-    Path("/mount/src/alertscholar/student-risk-system/model/logistic_regression_model.pkl"),
+    Path("/mount/src/alertscholar/student-risk-system/models/logistic_regression_model.pkl"),
 ]
 
 # 3) Last-resort: shallow search under project root (max 2 levels)
 if not any(p and Path(p).exists() for p in candidates):
     for p in BASE.rglob("*.pkl"):
-        if "model" in str(p.parent).lower() and "logistic_regression_model" in p.name:
+        if "models" in str(p.parent).lower() and "logistic_regression_model" in p.name:
             candidates.insert(0, p)
             break
 
@@ -73,7 +73,7 @@ with st.expander("Model loading details", expanded=False):
     st.caption(f"Selected: {str(MODEL_PATH) if MODEL_PATH else 'None'}")
 
 if MODEL_PATH is None:
-    st.error("Couldn't find logistic_regression_model.pkl. Place it in ./model/ next to app.py "
+    st.error("Couldn't find logistic_regression_model.pkl. Place it in ./models/ next to app.py "
              "or set MODEL_PATH env var to the absolute file path.")
     st.stop()
 
