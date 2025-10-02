@@ -30,13 +30,5 @@ outputs/
 *.zip
 *.pdf
 
-# Models (ignore all, but allow one reference model)
-*.pkl
-*.joblib
-!model/logistic_regression_model.pkl   # keep this one tracked
-
-# CSVs (ignore all, but allow one sample file)
-!sample_data/student_sample.csv
-
 # Logs
 *.log

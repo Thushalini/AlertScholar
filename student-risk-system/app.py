@@ -4,12 +4,22 @@
 # Reqs: pip install streamlit joblib reportlab pandas numpy python-dotenv
 
 import os, io, zipfile, joblib, numpy as np, pandas as pd, streamlit as st
+import glob
 from pathlib import Path
-BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = BASE_DIR / "model" / "logistic_regression_model.pkl"
-model = joblib.load(str(MODEL_PATH))
 from datetime import datetime
 from io import BytesIO
+
+from pathlib import Path, PurePath
+BASE = Path(__file__).resolve().parent
+MODEL_PATH = BASE / "model" / "logistic_regression_model.pkl"
+
+# debug (one time)
+print("HERE:", BASE)
+print("TREE:", glob.glob(str(BASE / "**/*"), recursive=True))
+
+assert MODEL_PATH.exists(), f"Missing: {MODEL_PATH}"
+model = joblib.load(str(MODEL_PATH))
+
 
 # Load .env if present
 try:
