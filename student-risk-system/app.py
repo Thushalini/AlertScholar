@@ -23,7 +23,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
-st.set_page_config(page_title="Early-Warning — At-Risk Students", page_icon="🎓", layout="centered")
+st.set_page_config(page_title="AlertScholar", page_icon="🎓", layout="centered")
 
 BASE = Path(__file__).resolve().parent
 
@@ -525,7 +525,7 @@ def build_parent_letter_pdf(student: dict, proba: float, threshold: float, tips:
   small = ParagraphStyle('s', parent=styles['BodyText'], fontSize=9, leading=14, textColor=colors.HexColor("#6b7280"))
 
   elements = []
-  elements.append(Paragraph("Early-Warning & Intervention Report", title))
+  elements.append(Paragraph("AlertScholar <br/> Early-Warning & Intervention Report", title))
   elements.append(Paragraph(datetime.now().strftime("%B %d, %Y"), small))
   elements.append(Spacer(1, 10))
 
