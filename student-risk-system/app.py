@@ -768,7 +768,7 @@ with tab1:
         "first_intervention": first_intervention
       }])
       csv_buf = single_out.to_csv(index=False).encode("utf-8")
-      st.download_button("⬇️ Download CSV (single)", data=csv_buf, file_name="student_risk_single.csv",
+      st.download_button("⬇️ Download CSV (single)", data=csv_buf, file_name="single_student_report.csv",
                          mime="text/csv", use_container_width=True)
 
     # PDF (single)
