@@ -149,3 +149,6 @@ Feel free to make suggestions and try out the system code.
 ---
 
 ## ** Deployment **
+- Hosted with streamlit
+
+***https://alertscholar.streamlit.app/*** copy this URL to got to our page
